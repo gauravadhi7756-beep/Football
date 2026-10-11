@@ -1,0 +1,38 @@
+name: Probe ESPN API (temporary)
+on:
+  push:
+    branches: [claude/football-dashboard-matches-standings-1yrjz2]
+    paths: [.github/workflows/probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          B=https://site.api.espn.com
+          for u in "/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20261010-20261012&limit=300" \
+                   "/apis/v2/sports/soccer/eng.1/standings" \
+                   "/apis/site/v2/sports/soccer/eng.1/statistics" \
+                   "/apis/site/v2/sports/soccer/eng.1/news?limit=15"; do
+            echo "=================== $u"
+            curl -sS -D - -o body.json -H "Origin: https://gauravadhi7756-beep.github.io" "$B$u" | grep -iE "^HTTP|access-control|content-type"
+            echo "--- preflight-free GET size: $(wc -c < body.json)"
+            python3 -c "
+          import json; d=json.load(open('body.json'))
+          def shape(o, depth=0, maxd=4):
+              if depth>maxd: return '...'
+              if isinstance(o, dict): return {k: shape(v, depth+1, maxd) for k,v in list(o.items())[:25]}
+              if isinstance(o, list): return [shape(o[0], depth+1, maxd), f'len={len(o)}'] if o else []
+              return type(o).__name__ if not isinstance(o,(int,float,str)) or len(str(o))>40 else o
+          print(json.dumps(shape(d), indent=1)[:3500])
+          "
+          done
+          echo "=================== statistics leader sample"
+          curl -sS "$B/apis/site/v2/sports/soccer/eng.1/statistics" | python3 -c "
+          import json,sys; d=json.load(sys.stdin)
+          for c in (d.get('stats') or [])[:3]:
+              print(c.get('name'), c.get('displayName'), json.dumps((c.get('leaders') or [{}])[0])[:1500])
+          "
+          echo "=================== sizes per league"
+          for l in uefa.champions uefa.nations eng.1 esp.1 ita.1 fra.1 usa.1; do
+            echo "$l scoreboard events: $(curl -sS "$B/apis/site/v2/sports/soccer/$l/scoreboard?dates=20261010-20261012&limit=300" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("events",[])))') standings groups: $(curl -sS "$B/apis/v2/sports/soccer/$l/standings" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("children",[])), list(d.keys())[:8])')"
+          done
