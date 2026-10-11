@@ -16,7 +16,8 @@ const leagueLogo = (l) => `https://a.espncdn.com/i/leaguelogos/soccer/500/${l.lo
 
 // Try ESPN directly first; fall back to the local proxy in server.js
 // (useful if a browser extension or network blocks cross-origin requests).
-const API_BASES = ['https://site.api.espn.com', '/espn'];
+const API_BASES = ['https://site.api.espn.com'];
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) API_BASES.push('/espn');
 const REFRESH_MS = 30_000;
 
 // ---------------------------------------------------------------------------
@@ -125,22 +126,30 @@ function dateWindow() {
   const wanted = new Set();
   for (let i = 0; i < days; i++) wanted.add(isoOf(addDays(start, i)));
   // Pad a day each side: ESPN buckets by US time, we filter by the viewer's local day.
-  const q = `${ymd(addDays(start, -1))}-${ymd(addDays(start, days))}`;
-  return { q, wanted };
+  // ESPN rejects date ranges (HTTP 400), so request each day separately.
+  const fetchDays = [];
+  for (let i = -1; i <= days; i++) fetchDays.push(ymd(addDays(start, i)));
+  return { fetchDays, wanted };
 }
 
 async function loadMatches({ fresh = false } = {}) {
   const box = $('#matches');
   if (!fresh) box.innerHTML = '<div class="loading">Loading matches…</div>';
-  const { q, wanted } = dateWindow();
+  const { fetchDays, wanted } = dateWindow();
   const leagues = selectedLeagues();
 
   const results = await Promise.all(
-    leagues.map((l) =>
-      api(`/apis/site/v2/sports/soccer/${l.id}/scoreboard?dates=${q}&limit=300`, { fresh })
-        .then((data) => ({ league: l, data }))
-        .catch((error) => ({ league: l, error }))
-    )
+    leagues.map(async (l) => {
+      const days = await Promise.allSettled(
+        fetchDays.map((d) => api(`/apis/site/v2/sports/soccer/${l.id}/scoreboard?dates=${d}`, { fresh }))
+      );
+      const ok = days.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+      if (!ok.length) return { league: l, error: days[0].reason };
+      // Merge the per-day responses, dropping events that appear on two days.
+      const byId = new Map();
+      for (const d of ok) for (const e of d.events || []) byId.set(e.id, e);
+      return { league: l, data: { leagues: ok[0].leagues, events: [...byId.values()] } };
+    })
   );
 
   const allEvents = [];
@@ -172,7 +181,8 @@ async function loadMatches({ fresh = false } = {}) {
 
   let html = '';
   if (failed.length === leagues.length) {
-    html = `<div class="error">Couldn't load match data. Check your internet connection, or run <code>node server.js</code> and open <code>http://localhost:8080</code> to use the built-in proxy.</div>`;
+    const why = results.find((r) => r.error)?.error?.message || 'unknown error';
+    html = `<div class="error">Couldn't load match data (${esc(why)}). Check your internet connection and try ⟳ Refresh.</div>`;
   } else {
     html = blocks.join('');
     if (!blocks.length) {
