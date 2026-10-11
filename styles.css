@@ -178,6 +178,15 @@ table.standings td.pts { font-weight: 700; }
 .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .group-title { padding: 8px 14px; font-weight: 600; background: var(--bg); border-top: 1px solid var(--border); }
 
+/* Top scorers */
+.leaders-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.leaders-grid > div + div { border-left: 1px solid var(--border); }
+.leaders-grid td.team-cell img { border-radius: 50%; background: var(--surface-2); }
+@media (max-width: 760px) {
+  .leaders-grid { grid-template-columns: 1fr; }
+  .leaders-grid > div + div { border-left: none; }
+}
+
 /* News */
 .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .news-card {

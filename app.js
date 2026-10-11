@@ -513,7 +513,97 @@ function populateSeasons() {
   const current = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   const opts = ['<option value="">Current season</option>'];
   for (let y = current; y >= current - 6; y--) opts.push(`<option value="${y}">${y}/${String(y + 1).slice(2)} (MLS ${y})</option>`);
-  $('#season').innerHTML = opts.join('');
+  document.querySelectorAll('.season-select').forEach((sel) => (sel.innerHTML = opts.join('')));
+}
+
+// ---------------------------------------------------------------------------
+// Top scorers / assists
+// ---------------------------------------------------------------------------
+// ESPN's league "statistics" feed returns leader categories, e.g.
+// { stats: [{ name: 'goalsLeaders', leaders: [{ value, displayValue: 'Matches: 8, Goals: 10', athlete }] }] }
+function leaderCategories(data) {
+  const cats = data?.stats || data?.leaders || data?.categories || [];
+  return Array.isArray(cats) ? cats : [];
+}
+
+function findCategory(cats, re) {
+  return cats.find((c) => re.test(`${c.name || ''} ${c.displayName || ''} ${c.abbreviation || ''}`));
+}
+
+// Pull "Matches: 8, Goals: 10" style pairs out of a leader's displayValue.
+function leaderFields(leader) {
+  const out = {};
+  for (const m of String(leader.displayValue || '').matchAll(/([A-Za-z ]+):\s*([\d.]+)/g)) out[m[1].trim().toLowerCase()] = m[2];
+  return out;
+}
+
+async function loadScorerData(league, fresh) {
+  const qs = state.season ? `?season=${state.season}` : '';
+  try {
+    const data = await api(`/apis/site/v2/sports/soccer/${league.id}/statistics${qs}`, { fresh });
+    if (leaderCategories(data).length) return data;
+  } catch {}
+  return api(`/apis/site/v2/sports/soccer/${league.id}/leaders${qs}`, { fresh });
+}
+
+async function loadScorers({ fresh = false } = {}) {
+  const box = $('#scorers');
+  if (!fresh) box.innerHTML = '<div class="loading">Loading top scorers…</div>';
+  const leagues = selectedLeagues();
+  const results = await Promise.all(
+    leagues.map((l) =>
+      loadScorerData(l, fresh)
+        .then((data) => ({ league: l, data }))
+        .catch((error) => ({ league: l, error }))
+    )
+  );
+
+  box.innerHTML = results
+    .map(({ league, data, error }) => {
+      const head = `<div class="league-head">${logoImg(leagueLogo(league))}<h2>${esc(league.name)}</h2></div>`;
+      const cats = error ? [] : leaderCategories(data);
+      const goals = findCategory(cats, /goal/i);
+      const assists = findCategory(cats, /assist/i);
+      if (!goals?.leaders?.length && !assists?.leaders?.length) {
+        return `<div class="league-block">${head}<div class="empty" style="border:none">${
+          error ? "Couldn't load scorers." : 'No scorer data available for this season yet.'
+        }</div></div>`;
+      }
+      return `<div class="league-block">${head}<div class="leaders-grid">
+        ${goals?.leaders?.length ? renderLeaders('Top scorers', goals.leaders, 'goals', 'Goals') : ''}
+        ${assists?.leaders?.length ? renderLeaders('Top assists', assists.leaders, 'assists', 'Assists') : ''}
+      </div></div>`;
+    })
+    .join('');
+  setUpdated();
+}
+
+function renderLeaders(title, leaders, key, label) {
+  let prevVal = null;
+  let rank = 0;
+  const rows = leaders
+    .slice(0, 20)
+    .map((ld, i) => {
+      const f = leaderFields(ld);
+      const val = ld.value ?? f[key] ?? '';
+      if (String(val) !== String(prevVal)) rank = i + 1;
+      prevVal = val;
+      const a = ld.athlete || {};
+      const team = a.team || ld.team || {};
+      const photo = a.headshot?.href || a.headshot || '';
+      return `<tr>
+        <td class="pos">${rank}</td>
+        <td class="team-cell"><div>${photo ? logoImg(photo) : logoImg(teamLogo(team))}<span><b>${esc(a.displayName || a.fullName || '')}</b>${
+        team.displayName || team.name ? `<br><span class="muted small">${esc(team.displayName || team.name)}</span>` : ''
+      }</span></div></td>
+        <td>${esc(f.matches ?? f.appearances ?? '–')}</td>
+        <td class="pts">${esc(Number.isFinite(Number(val)) ? Math.round(Number(val)) : val)}</td>
+      </tr>`;
+    })
+    .join('');
+  return `<div><div class="group-title">${esc(title)}</div><div class="table-wrap"><table class="standings">
+    <thead><tr><th>#</th><th style="text-align:left">Player</th><th title="Matches played">MP</th><th>${esc(label)}</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -562,6 +652,7 @@ async function loadNews({ fresh = false } = {}) {
 function loadCurrent(opts) {
   if (state.view === 'matches') return loadMatches(opts);
   if (state.view === 'standings') return loadStandings(opts);
+  if (state.view === 'scorers') return loadScorers(opts);
   return loadNews(opts);
 }
 
@@ -621,10 +712,14 @@ function init() {
     loadMatches();
   });
 
-  $('#season').addEventListener('change', (e) => {
-    state.season = e.target.value;
-    loadStandings();
-  });
+  // Tables and Top Scorers share one season choice.
+  document.querySelectorAll('.season-select').forEach((sel) =>
+    sel.addEventListener('change', (e) => {
+      state.season = e.target.value;
+      document.querySelectorAll('.season-select').forEach((s) => (s.value = state.season));
+      loadCurrent();
+    })
+  );
 
   $('#matches').addEventListener('click', (e) => {
     const row = e.target.closest('.match');
