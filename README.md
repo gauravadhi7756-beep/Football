@@ -37,6 +37,6 @@ You need Node.js 18 or newer. There are no dependencies to install.
 
 ## Put it online (free, with GitHub Pages)
 
-1. In the repository on GitHub, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
-2. Merge this work into `main`. The workflow in `.github/workflows/pages.yml` deploys the site automatically, and you can also run it from the **Actions** tab.
-3. The site will be at `https://<your-username>.github.io/<repo-name>/`.
+1. In the repository on GitHub, go to **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to **Deploy from a branch**, choose **main** and **/ (root)**, then click **Save**.
+3. The site will be at `https://<your-username>.github.io/<repo-name>/` and updates every time `main` changes.
