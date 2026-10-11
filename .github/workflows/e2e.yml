@@ -1,0 +1,30 @@
+name: Check live site (temporary)
+on:
+  push:
+    branches: [claude/football-dashboard-matches-standings-1yrjz2]
+    paths: [.github/workflows/e2e.yml]
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          for i in $(seq 1 30); do curl -sS "https://gauravadhi7756-beep.github.io/Football/?x=$RANDOM" | grep -q 'v=2026-10-11-saudi' && break; sleep 10; done
+          echo "index has new version: $(curl -sS https://gauravadhi7756-beep.github.io/Football/?x=$RANDOM | grep -c 'v=2026-10-11-saudi')"
+          echo "app.js has ksa.1: $(curl -sS 'https://gauravadhi7756-beep.github.io/Football/app.js?v=2026-10-11-saudi' | grep -c ksa.1)"
+          curl -sSI https://gauravadhi7756-beep.github.io/Football/app.js | grep -i cache-control
+          npm i --silent playwright@1.48.2 >/dev/null && npx playwright install --with-deps chromium >/dev/null 2>&1
+          cat > t.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const b = await chromium.launch(); const p = await b.newPage();
+            await p.goto('https://gauravadhi7756-beep.github.io/Football/#league=ksa.1&date=2026-10-09');
+            await p.waitForSelector('#matches .league-block, #matches .empty, #matches .error', { timeout: 30000 });
+            console.log('CHIPS:', (await p.locator('#leagues').innerText()).replace(/\s+/g, ' '));
+            console.log('MATCHES:', (await p.locator('#matches').innerText()).replace(/\s+/g, ' ').slice(0, 400));
+            await p.click('[data-view=standings]'); await p.waitForSelector('table.standings', { timeout: 30000 });
+            console.log('TABLE:', (await p.locator('#standings').innerText()).replace(/\s+/g, ' ').slice(0, 300));
+            await b.close();
+          })().catch(e => { console.error('FAILED', e.message); process.exit(1); });
+          JS
+          node t.js
