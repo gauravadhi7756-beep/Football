@@ -17,6 +17,8 @@ A live football dashboard covering:
 - **Tables**: full league tables (P, W, D, L, GF, GA, GD, Pts) with qualification and relegation zones colour-coded, group tables for the Nations League and MLS conferences, and past seasons.
 - **Top Scorers**: the top 20 goal scorers and assist providers in each competition, with matches played. This tab uses the same season picker as Tables.
 - **News**: the latest headlines for the selected competitions.
+- The page address remembers the tab, competition, date and season, so you can bookmark or share a view (e.g. `#view=standings&league=eng.1`).
+- A live-match counter on the Matches tab.
 - Light and dark themes, and a layout that works on phones.
 
 Data comes from ESPN's public sports API, so you don't need an API key.
@@ -32,3 +34,9 @@ node server.js        # then open http://localhost:8080
 ```
 
 You need Node.js 18 or newer. There are no dependencies to install.
+
+## Put it online (free, with GitHub Pages)
+
+1. In the repository on GitHub, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
+2. Merge this work into `main`. The workflow in `.github/workflows/pages.yml` deploys the site automatically, and you can also run it from the **Actions** tab.
+3. The site will be at `https://<your-username>.github.io/<repo-name>/`.

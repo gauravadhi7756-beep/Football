@@ -166,6 +166,8 @@ async function loadMatches({ fresh = false } = {}) {
   }
 
   state.lastEvents = allEvents;
+  const liveNow = allEvents.filter((e) => e.status?.type?.state === 'in').length;
+  $('[data-view="matches"]').innerHTML = `Matches${liveNow ? ` <span class="live-badge">${liveNow} live</span>` : ''}`;
   renderSummaryStrip(allEvents);
 
   let html = '';
@@ -649,7 +651,39 @@ async function loadNews({ fresh = false } = {}) {
 // ---------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------
+// Keep the current view in the URL hash so it survives reloads and can be shared,
+// e.g. #view=standings&league=eng.1
+const HASH_KEYS = { view: 'matches', league: 'all', date: '', range: 'day', status: 'all', season: '' };
+
+function saveHash() {
+  const p = new URLSearchParams();
+  for (const [k, def] of Object.entries(HASH_KEYS)) {
+    const v = k === 'date' && state.date === todayISO() ? '' : state[k];
+    if (v && v !== def) p.set(k, v);
+  }
+  const hash = p.toString();
+  history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search);
+}
+
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  const views = ['matches', 'standings', 'scorers', 'news'];
+  if (views.includes(p.get('view'))) state.view = p.get('view');
+  if (p.get('league') === 'all' || leagueById(p.get('league'))) state.league = p.get('league');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p.get('date') || '')) state.date = p.get('date');
+  if (['day', 'week'].includes(p.get('range'))) state.range = p.get('range');
+  if (['all', 'in', 'pre', 'post'].includes(p.get('status'))) state.status = p.get('status');
+  if (/^\d{4}$/.test(p.get('season') || '')) state.season = p.get('season');
+}
+
+function showView(view) {
+  state.view = view;
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
+}
+
 function loadCurrent(opts) {
+  saveHash();
   if (state.view === 'matches') return loadMatches(opts);
   if (state.view === 'standings') return loadStandings(opts);
   if (state.view === 'scorers') return loadScorers(opts);
@@ -666,8 +700,13 @@ function init() {
     if (t) document.documentElement.dataset.theme = t;
   } catch {}
 
+  readHash();
   $('#date').value = state.date;
   populateSeasons();
+  document.querySelectorAll('.season-select').forEach((s) => (s.value = state.season));
+  setActive($('#range'), 'range', state.range);
+  setActive($('#status-filter'), 'status', state.status);
+  showView(state.view);
   renderLeagueChips();
 
   $('#leagues').addEventListener('click', (ev) => {
@@ -680,9 +719,7 @@ function init() {
 
   document.querySelectorAll('.tab').forEach((tab) =>
     tab.addEventListener('click', () => {
-      state.view = tab.dataset.view;
-      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-      document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${state.view}`));
+      showView(tab.dataset.view);
       loadCurrent();
     })
   );
@@ -690,7 +727,7 @@ function init() {
   const setDate = (iso) => {
     state.date = iso;
     $('#date').value = iso;
-    loadMatches();
+    loadCurrent();
   };
   $('#date').addEventListener('change', (e) => e.target.value && setDate(e.target.value));
   $('#prev-day').addEventListener('click', () => setDate(isoOf(addDays(parseISO(state.date), state.range === 'week' ? -7 : -1))));
@@ -702,14 +739,14 @@ function init() {
     if (!b) return;
     state.range = b.dataset.range;
     setActive($('#range'), 'range', state.range);
-    loadMatches();
+    loadCurrent();
   });
   $('#status-filter').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     state.status = b.dataset.status;
     setActive($('#status-filter'), 'status', state.status);
-    loadMatches();
+    loadCurrent();
   });
 
   // Tables and Top Scorers share one season choice.
@@ -754,7 +791,7 @@ function init() {
     }
   }, REFRESH_MS);
 
-  loadMatches();
+  loadCurrent();
 }
 
 init();
