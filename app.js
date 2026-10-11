@@ -14,9 +14,10 @@ const LEAGUES = [
 ];
 const leagueLogo = (l) => `https://a.espncdn.com/i/leaguelogos/soccer/500/${l.logo}.png`;
 
-// Try ESPN directly first; fall back to the local proxy in server.js
-// (useful if a browser extension or network blocks cross-origin requests).
-const API_BASES = ['https://site.api.espn.com'];
+// Browsers can read ESPN's site.web.api host cross-origin; site.api.espn.com
+// fails in the browser even though it sends CORS headers, so it's only a fallback.
+// On localhost, server.js also offers a same-origin proxy.
+const API_BASES = ['https://site.web.api.espn.com', 'https://site.api.espn.com'];
 if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) API_BASES.push('/espn');
 const REFRESH_MS = 30_000;
 
