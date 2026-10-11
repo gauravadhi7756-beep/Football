@@ -7,32 +7,49 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - shell: bash
+        run: |
           B=https://site.api.espn.com
-          for u in "/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20261010-20261012&limit=300" \
-                   "/apis/v2/sports/soccer/eng.1/standings" \
-                   "/apis/site/v2/sports/soccer/eng.1/statistics" \
-                   "/apis/site/v2/sports/soccer/eng.1/news?limit=15"; do
-            echo "=================== $u"
-            curl -sS -D - -o body.json -H "Origin: https://gauravadhi7756-beep.github.io" "$B$u" | grep -iE "^HTTP|access-control|content-type"
-            echo "--- preflight-free GET size: $(wc -c < body.json)"
-            python3 -c "
-          import json; d=json.load(open('body.json'))
-          def shape(o, depth=0, maxd=4):
-              if depth>maxd: return '...'
-              if isinstance(o, dict): return {k: shape(v, depth+1, maxd) for k,v in list(o.items())[:25]}
-              if isinstance(o, list): return [shape(o[0], depth+1, maxd), f'len={len(o)}'] if o else []
-              return type(o).__name__ if not isinstance(o,(int,float,str)) or len(str(o))>40 else o
-          print(json.dumps(shape(d), indent=1)[:3500])
-          "
+          get() { curl -sS --compressed -o body.json -w "%{http_code}" "$B$1"; }
+          echo "########## scoreboard variants (eng.1)"
+          for q in "" "?dates=20261011" "?dates=20261010-20261012" "?dates=20261010-20261012&limit=100" "?dates=20261010-20261012&limit=300" "?dates=20261004-20261018&limit=200" "?limit=300"; do
+            c=$(get "/apis/site/v2/sports/soccer/eng.1/scoreboard$q"); echo "[$c] $q -> $(head -c 160 body.json)"; echo
           done
-          echo "=================== statistics leader sample"
-          curl -sS "$B/apis/site/v2/sports/soccer/eng.1/statistics" | python3 -c "
-          import json,sys; d=json.load(sys.stdin)
-          for c in (d.get('stats') or [])[:3]:
-              print(c.get('name'), c.get('displayName'), json.dumps((c.get('leaders') or [{}])[0])[:1500])
-          "
-          echo "=================== sizes per league"
+          shape() { python3 - "$@" <<'PY'
+          import json,sys
+          d=json.load(open('body.json'))
+          def s(o,dep=0):
+              if dep>5: return '...'
+              if isinstance(o,dict): return {k:s(v,dep+1) for k,v in list(o.items())[:30]}
+              if isinstance(o,list): return [s(o[0],dep+1),'len=%d'%len(o)] if o else []
+              return o if isinstance(o,(int,float,bool)) or (isinstance(o,str) and len(o)<50) else type(o).__name__
+          print(json.dumps(s(d),indent=1)[:int(sys.argv[1]) if len(sys.argv)>1 else 4000])
+          PY
+          }
+          echo "########## scoreboard event shape"; get "/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20261004-20261018"; python3 -c "
+          import json; d=json.load(open('body.json')); e=(d.get('events') or [None])[0]; print(json.dumps(e)[:2500])"
+          echo; echo "########## standings"; c=$(get "/apis/v2/sports/soccer/eng.1/standings"); echo "[$c]"; python3 -c "
+          import json; d=json.load(open('body.json')); print(list(d.keys())); ch=d.get('children',[]); print('children',len(ch))
+          e=ch[0]['standings']['entries'][0] if ch else d.get('standings',{}).get('entries',[{}])[0]
+          print(json.dumps(e)[:2500])"
+          echo; echo "########## statistics"; c=$(get "/apis/site/v2/sports/soccer/eng.1/statistics"); echo "[$c] $(head -c 300 body.json)"; echo; python3 -c "
+          import json; d=json.load(open('body.json')); print(list(d.keys()))
+          for c in (d.get('stats') or [])[:4]: print('CAT', c.get('name'), '|', c.get('displayName'), '|', json.dumps((c.get('leaders') or [{}])[0])[:1200])" || true
+          echo; echo "########## news"; c=$(get "/apis/site/v2/sports/soccer/eng.1/news?limit=15"); echo "[$c]"; python3 -c "
+          import json; d=json.load(open('body.json')); a=d.get('articles',[]); print(len(a)); print(json.dumps(a[0])[:800] if a else '')" || true
+          echo; echo "########## per league"
           for l in uefa.champions uefa.nations eng.1 esp.1 ita.1 fra.1 usa.1; do
-            echo "$l scoreboard events: $(curl -sS "$B/apis/site/v2/sports/soccer/$l/scoreboard?dates=20261010-20261012&limit=300" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("events",[])))') standings groups: $(curl -sS "$B/apis/v2/sports/soccer/$l/standings" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("children",[])), list(d.keys())[:8])')"
+            c1=$(get "/apis/site/v2/sports/soccer/$l/scoreboard?dates=20261004-20261018"); n=$(python3 -c "import json; print(len(json.load(open('body.json')).get('events',[])))" 2>/dev/null)
+            c2=$(get "/apis/v2/sports/soccer/$l/standings"); g=$(python3 -c "import json; d=json.load(open('body.json')); print(len(d.get('children',[])), [c.get('name') for c in d.get('children',[])][:4])" 2>/dev/null)
+            c3=$(get "/apis/site/v2/sports/soccer/$l/statistics"); st=$(python3 -c "import json; d=json.load(open('body.json')); print([ (c.get('name'), len(c.get('leaders',[]))) for c in d.get('stats',[])][:4])" 2>/dev/null)
+            echo "$l | scoreboard[$c1] events=$n | standings[$c2] groups=$g | stats[$c3] $st"
           done
+          echo "########## summary sample"; get "/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260901-20261010" >/dev/null
+          id=$(python3 -c "import json; ev=[e for e in json.load(open('body.json')).get('events',[]) if e['status']['type']['state']=='post']; print(ev[-1]['id'] if ev else '')")
+          c=$(get "/apis/site/v2/sports/soccer/eng.1/summary?event=$id"); echo "[$c] event $id"; python3 -c "
+          import json; d=json.load(open('body.json')); print(list(d.keys()))
+          print('KEYEVENT', json.dumps((d.get('keyEvents') or [{}])[1] if len(d.get('keyEvents') or [])>1 else {})[:700])
+          bt=d.get('boxscore',{}).get('teams',[]); print('BOX', json.dumps(bt[0])[:900] if bt else '')
+          r=d.get('rosters',[]); print('ROSTER', json.dumps({k:v for k,v in r[0].items() if k!='roster'})[:400] if r else '', json.dumps(r[0]['roster'][0])[:600] if r and r[0].get('roster') else '')
+          print('GAMEINFO', json.dumps(d.get('gameInfo'))[:500])
+          print('H2H', json.dumps(d.get('headToHeadGames'))[:600])" || true
