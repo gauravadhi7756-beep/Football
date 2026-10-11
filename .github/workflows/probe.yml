@@ -10,18 +10,21 @@ jobs:
       - shell: bash
         run: |
           B=https://site.api.espn.com
-          for d in 20261003 20261004 20261005; do curl -sS --compressed "$B/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=$d" > sb_$d.json; done
+          for l in eng.1 uefa.nations; do for d in 20261010 20261009 20260927 20260926 20260920; do curl -sS --compressed "$B/apis/site/v2/sports/soccer/$l/scoreboard?dates=$d" > sb_${l}_$d.json; done; done
+          for f in sb_*.json; do echo "$f $(python3 -c "import json; print(len(json.load(open('$f')).get('events',[])))")"; done
           python3 - <<'PY'
           import json,glob,urllib.request,gzip
           evs=[e for f in sorted(glob.glob('sb_*.json')) for e in json.load(open(f)).get('events',[])]
           print('events', len(evs))
-          e=[x for x in evs if x['status']['type']['state']=='post'][0]
+          e=[x for x in evs if x['status']['type']['state']=='post'][-1]
+          LG=[f.split('_')[1] for f in sorted(glob.glob('sb_*.json')) if any(x['id']==e['id'] for x in json.load(open(f)).get('events',[]))][0]
+          print('USING', LG, e['name'], e['date'])
           c=e['competitions'][0]
           print('STATUS', json.dumps(e['status'])[:500])
           print('COMP KEYS', list(c.keys()))
           print('NOTES', c.get('notes'), 'VENUE', json.dumps(c.get('venue'))[:200])
           print('COMPETITOR', json.dumps({k:v for k,v in c['competitors'][0].items() if k not in ('statistics','leaders')})[:900])
-          r=urllib.request.urlopen('https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/summary?event='+e['id']); b=r.read()
+          r=urllib.request.urlopen('https://site.api.espn.com/apis/site/v2/sports/soccer/'+LG+'/summary?event='+e['id']); b=r.read()
           try: b=gzip.decompress(b)
           except Exception: pass
           d=json.loads(b)
