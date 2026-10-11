@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Football Dashboard</title>
+  <meta name="description" content="Live scores, fixtures, results, standings and news for the Champions League, Nations League, Premier League, LaLiga, Serie A, Ligue 1 and MLS." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="ball" aria-hidden="true">⚽</span>
+      <h1>Football Dashboard</h1>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="matches" role="tab">Matches</button>
+      <button class="tab" data-view="standings" role="tab">Tables</button>
+      <button class="tab" data-view="news" role="tab">News</button>
+    </nav>
+    <div class="top-actions">
+      <span id="updated" class="muted small"></span>
+      <button id="refresh" class="icon-btn" title="Refresh">⟳</button>
+      <button id="theme" class="icon-btn" title="Toggle theme">◐</button>
+    </div>
+  </header>
+
+  <div class="leagues" id="leagues"></div>
+
+  <main>
+    <!-- MATCHES -->
+    <section id="view-matches" class="view active">
+      <div class="toolbar">
+        <div class="date-nav">
+          <button class="btn" id="prev-day">‹</button>
+          <input type="date" id="date" />
+          <button class="btn" id="next-day">›</button>
+          <button class="btn" id="today">Today</button>
+        </div>
+        <div class="seg" id="range">
+          <button data-range="day" class="active">Day</button>
+          <button data-range="week">Week</button>
+        </div>
+        <div class="seg" id="status-filter">
+          <button data-status="all" class="active">All</button>
+          <button data-status="in">Live</button>
+          <button data-status="pre">Upcoming</button>
+          <button data-status="post">Finished</button>
+        </div>
+      </div>
+      <div id="summary-strip" class="summary-strip"></div>
+      <div id="matches"></div>
+    </section>
+
+    <!-- STANDINGS -->
+    <section id="view-standings" class="view">
+      <div class="toolbar">
+        <label class="muted small">Season
+          <select id="season"></select>
+        </label>
+        <div id="standings-legend" class="legend"></div>
+      </div>
+      <div id="standings"></div>
+    </section>
+
+    <!-- NEWS -->
+    <section id="view-news" class="view">
+      <div id="news" class="news-grid"></div>
+    </section>
+  </main>
+
+  <dialog id="match-modal">
+    <div class="modal-head">
+      <button class="icon-btn close" id="modal-close" title="Close">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </dialog>
+
+  <footer class="muted small">Data: ESPN public sports API. Live matches auto-refresh every 30 seconds.</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
