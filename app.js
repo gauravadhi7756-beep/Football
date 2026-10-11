@@ -255,7 +255,7 @@ function renderMatchRow(league, e) {
       home.shootoutScore != null && away.shootoutScore != null ? `<span class="pens">(${home.shootoutScore}–${away.shootoutScore} pens)</span>` : '';
     score = `<div class="score">${esc(home.score ?? '-')} – ${esc(away.score ?? '-')}${pens}</div>`;
   }
-  const notes = [comp.notes?.[0]?.headline, comp.venue?.fullName].filter(Boolean).map(esc).join(' · ');
+  const notes = [comp.notes?.[0]?.headline || comp.altGameNote, comp.venue?.fullName].filter(Boolean).map(esc).join(' · ');
   const team = (c, side) =>
     `<div class="team ${side} ${c.winner ? 'winner' : ''}">${side === 'away' ? logoImg(teamLogo(c.team)) : ''}<span class="name" title="${esc(
       c.team?.displayName
@@ -314,7 +314,10 @@ function renderMatchDetail(league, s) {
   }${comp.notes?.[0]?.headline ? ' · ' + esc(comp.notes[0].headline) : ''}</div>`;
 
   // Timeline (goals, cards, subs)
-  const events = (s.keyEvents || []).filter((k) => k.team && k.clock?.displayValue);
+  // Keep goals, cards and substitutions; ESPN also lists kick-off, delays, etc.
+  const events = (s.keyEvents || []).filter(
+    (k) => k.team && k.clock?.displayValue && (k.scoringPlay || /goal|card|substitution|penalty/i.test(`${k.type?.type} ${k.type?.text}`))
+  );
   if (events.length) {
     const icon = (k) => {
       const txt = `${k.type?.text || ''} ${k.type?.type || ''}`.toLowerCase();
@@ -351,10 +354,14 @@ function renderMatchDetail(league, s) {
         if (!as) return '';
         const hv = parseFloat(hs.displayValue) || 0;
         const av = parseFloat(as.displayValue) || 0;
+        // ESPN sends most percentages as fractions (0.9) but possession as 62.
+        const fmt = (st, v) =>
+          /Pct$/.test(st.name) ? `${Math.round(v <= 1 && st.name !== 'possessionPct' ? v * 100 : v)}%` : st.displayValue;
         const total = hv + av || 1;
-        const label = hs.label || hs.name.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
-        return `<div class="stat-row"><div class="labels"><span>${esc(hs.displayValue)}</span><span>${esc(label)}</span><span>${esc(
-          as.displayValue
+        const raw = hs.label || hs.name.replace(/([A-Z])/g, ' $1');
+        const label = raw === raw.toUpperCase() ? raw.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()) : raw.replace(/^./, (c) => c.toUpperCase());
+        return `<div class="stat-row"><div class="labels"><span>${esc(fmt(hs, hv))}</span><span>${esc(label)}</span><span>${esc(
+          fmt(as, av)
         )}</span></div><div class="bars"><div class="h" style="flex:${hv / total}"></div><div class="a" style="flex:${av / total}"></div></div></div>`;
       })
       .join('');
