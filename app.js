@@ -11,6 +11,7 @@ const LEAGUES = [
   { id: 'ita.1', name: 'Serie A', short: 'Serie A', logo: 12 },
   { id: 'fra.1', name: 'Ligue 1', short: 'Ligue 1', logo: 9 },
   { id: 'usa.1', name: 'Major League Soccer', short: 'MLS', logo: 19 },
+  { id: 'ksa.1', name: 'Saudi Pro League', short: 'Saudi Pro League', logo: 2488 },
 ];
 const leagueLogo = (l) => `https://a.espncdn.com/i/leaguelogos/soccer/500/${l.logo}.png`;
 

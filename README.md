@@ -9,6 +9,7 @@ A live football dashboard covering:
 - Serie A
 - Ligue 1
 - MLS
+- Saudi Pro League
 
 ## Features
 
