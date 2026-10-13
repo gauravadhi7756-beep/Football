@@ -10,6 +10,8 @@ A live football dashboard covering:
 - Ligue 1
 - MLS
 - Saudi Pro League
+- Bundesliga
+- Eredivisie
 
 ## Features
 
