@@ -1,0 +1,28 @@
+name: Probe Bundesliga and Eredivisie (temporary)
+on:
+  push:
+    branches: [claude/football-dashboard-matches-standings-1yrjz2]
+    paths: [.github/workflows/probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          B=https://site.web.api.espn.com
+          for l in ger.1 ned.1; do
+            echo "=== $l"
+            curl -sS --compressed "$B/apis/site/v2/sports/soccer/$l/scoreboard" | python3 -c "
+          import json,sys; d=json.load(sys.stdin); lg=d['leagues'][0]
+          print('LEAGUE', lg.get('id'), lg.get('name'), lg.get('abbreviation'), [x.get('href') for x in lg.get('logos',[])])
+          print('EVENTS today', len(d.get('events',[])))"
+            for dt in 20261010 20261011 20261017 20261018; do echo "day $dt: $(curl -sS --compressed "$B/apis/site/v2/sports/soccer/$l/scoreboard?dates=$dt" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("events",[])))')"; done
+            curl -sS --compressed "$B/apis/v2/sports/soccer/$l/standings" | python3 -c "
+          import json,sys; d=json.load(sys.stdin); ch=d.get('children',[])
+          print('STANDINGS groups', len(ch), [c.get('name') for c in ch], 'rows', len(ch[0]['standings']['entries']) if ch else 0)
+          for e in (ch[0]['standings']['entries'] if ch else [])[:3]: print('  ', e['team']['displayName'], [s.get('displayValue') for s in e['stats'] if s['name'] in ('gamesPlayed','points')])"
+            curl -sS --compressed "$B/apis/site/v2/sports/soccer/$l/statistics" | python3 -c "
+          import json,sys; d=json.load(sys.stdin)
+          for c in d.get('stats',[]): print('CAT', c['name'], [(x['athlete']['displayName'], x.get('value')) for x in c.get('leaders',[])[:3]])"
+            curl -sS --compressed "$B/apis/site/v2/sports/soccer/$l/news?limit=5" | python3 -c "import json,sys; print('NEWS', len(json.load(sys.stdin).get('articles',[])))"
+          done
