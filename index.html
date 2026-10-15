@@ -6,7 +6,7 @@
   <!-- Bump ?v= on app.js/styles.css with each release so browsers skip stale cached copies. -->
   <title>Football Dashboard</title>
   <meta name="description" content="Live scores, fixtures, results, standings and news for the Champions League, Europa League, Conference League, Nations League, Premier League, LaLiga, Serie A, Ligue 1, MLS, the Saudi Pro League, the Bundesliga and the Eredivisie." />
-  <link rel="stylesheet" href="styles.css?v=2026-10-15-calendar" />
+  <link rel="stylesheet" href="styles.css?v=2026-10-15-today" />
 </head>
 <body>
   <header class="topbar">
@@ -58,7 +58,7 @@
     <!-- CHAMPIONS LEAGUE CALENDAR -->
     <section id="view-calendar" class="view">
       <div class="toolbar">
-        <span class="muted small">Champions League fixtures for the next 45 days, in your local time.</span>
+        <span class="muted small">Champions League fixtures for the rest of the season, in your local time.</span>
         <button id="cal-download" class="btn" disabled>Download .ics for your calendar</button>
       </div>
       <div id="calendar-list"></div>
@@ -100,6 +100,6 @@
 
   <footer class="muted small">Data: ESPN public sports API. Live matches auto-refresh every 30 seconds.</footer>
 
-  <script src="app.js?v=2026-10-15-calendar"></script>
+  <script src="app.js?v=2026-10-15-today"></script>
 </body>
 </html>

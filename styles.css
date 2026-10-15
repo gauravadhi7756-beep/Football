@@ -184,6 +184,11 @@ table.standings td.pts { font-weight: 700; }
 .group-title { padding: 8px 14px; font-weight: 600; background: var(--bg); border-top: 1px solid var(--border); }
 
 /* Champions League calendar */
+.cal-today { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; }
+.cal-today h2 { font-size: 15px; margin: 0 0 8px; color: var(--accent); }
+.cal-today .cal-row { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); margin-bottom: 8px; }
+.cal-today .cal-row:first-of-type { border-top: 1px solid var(--border); }
+.cal-next { margin: 4px 0 0; font-size: 13px; }
 .leagues[hidden] { display: none; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .cal-day { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; box-shadow: var(--shadow); }

@@ -679,18 +679,30 @@ async function loadNews({ fresh = false } = {}) {
 // Champions League calendar (time-ordered fixtures + .ics export)
 // ---------------------------------------------------------------------------
 const CAL_LEAGUE_ID = 'uefa.champions';
-const CAL_DAYS = 45;
+const CAL_MONTHS = 8; // this month plus the next seven, which covers the rest of a season
+
+// ESPN returns a whole month for dates=YYYYMM, so the calendar renews itself:
+// every visit starts from the current month.
+function calendarMonths() {
+  const first = new Date();
+  first.setDate(1);
+  return Array.from({ length: CAL_MONTHS }, (_, i) => {
+    const d = new Date(first.getFullYear(), first.getMonth() + i, 1);
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+}
 
 async function loadCalendarEvents(fresh) {
-  const start = addDays(parseISO(todayISO()), -1);
-  const days = Array.from({ length: CAL_DAYS + 2 }, (_, i) => ymd(addDays(start, i)));
   const results = await Promise.allSettled(
-    days.map((d) => api(`/apis/site/v2/sports/soccer/${CAL_LEAGUE_ID}/scoreboard?dates=${d}`, { fresh }))
+    calendarMonths().map((m) => api(`/apis/site/v2/sports/soccer/${CAL_LEAGUE_ID}/scoreboard?dates=${m}`, { fresh }))
   );
   const byId = new Map();
   for (const r of results) if (r.status === 'fulfilled') for (const e of r.value.events || []) byId.set(e.id, e);
   if (!byId.size && results.every((r) => r.status === 'rejected')) throw results[0].reason;
-  return [...byId.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const today = todayISO();
+  return [...byId.values()]
+    .filter((e) => localDayKey(e.date) >= today)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 function matchTeams(e) {
@@ -701,14 +713,32 @@ function matchTeams(e) {
 }
 
 function renderCalendar(events) {
-  if (!events.length) return `<div class="empty">No Champions League matches in the next ${CAL_DAYS} days.</div>`;
+  const today = todayISO();
+  const todays = events.filter((e) => localDayKey(e.date) === today);
+  const later = events.filter((e) => localDayKey(e.date) > today);
+  const next = events.find((e) => e.status?.type?.state === 'pre' && new Date(e.date) > new Date());
+
+  let html = `<div class="cal-today">
+    <h2>Today · ${esc(fmtDay(today))}</h2>
+    ${todays.length ? todays.map(renderCalRow).join('') : '<p class="muted">No Champions League match today.</p>'}
+    ${
+      next
+        ? `<p class="cal-next">Next match: <b>${esc(fmtDateTime(next.date))}</b> · ${esc(matchTeams(next).home.team?.displayName || 'TBD')} vs ${esc(
+            matchTeams(next).away.team?.displayName || 'TBD'
+          )}</p>`
+        : ''
+    }
+  </div>`;
+
+  if (!later.length && !todays.length) return html + '<div class="empty">No Champions League fixtures found for the rest of the season yet.</div>';
+
   const groups = new Map();
-  for (const e of events) {
+  for (const e of later) {
     const day = localDayKey(e.date);
     if (!groups.has(day)) groups.set(day, []);
     groups.get(day).push(e);
   }
-  return [...groups]
+  html += [...groups]
     .map(
       ([day, evs]) => `<div class="cal-day">
         <div class="cal-date"><b>${esc(fmtDay(day))}</b><span class="muted small">${evs.length} match${evs.length === 1 ? '' : 'es'}</span></div>
@@ -716,6 +746,7 @@ function renderCalendar(events) {
       </div>`
     )
     .join('');
+  return html;
 }
 
 function renderCalRow(e) {
