@@ -183,6 +183,23 @@ table.standings td.pts { font-weight: 700; }
 .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .group-title { padding: 8px 14px; font-weight: 600; background: var(--bg); border-top: 1px solid var(--border); }
 
+/* Champions League calendar */
+.leagues[hidden] { display: none; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cal-day { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; box-shadow: var(--shadow); }
+.cal-date { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.cal-row { display: grid; grid-template-columns: 70px 1fr; gap: 4px 12px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--border); cursor: pointer; }
+.cal-row:first-of-type { border-top: none; }
+.cal-row:hover { background: var(--surface-2); }
+.cal-teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; text-align: center; font-weight: 500; }
+.cal-teams span:first-child { text-align: right; }
+.cal-score { font-variant-numeric: tabular-nums; background: var(--surface-2); border-radius: 6px; padding: 2px 10px; }
+.cal-meta { grid-column: 2; text-align: center; }
+@media (max-width: 640px) {
+  .cal-row { grid-template-columns: 1fr; }
+  .cal-meta { grid-column: 1; text-align: left; }
+}
+
 /* Top scorers */
 .leaders-grid { display: grid; grid-template-columns: 1fr 1fr; }
 .leaders-grid > div + div { border-left: 1px solid var(--border); }

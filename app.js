@@ -38,6 +38,7 @@ const state = {
   season: '',
   openEvent: null, // { league, id }
   lastEvents: [],
+  calEvents: [],
 };
 let baseIdx = 0;
 const cache = new Map();
@@ -674,6 +675,121 @@ async function loadNews({ fresh = false } = {}) {
 // ---------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Champions League calendar (time-ordered fixtures + .ics export)
+// ---------------------------------------------------------------------------
+const CAL_LEAGUE_ID = 'uefa.champions';
+const CAL_DAYS = 45;
+
+async function loadCalendarEvents(fresh) {
+  const start = addDays(parseISO(todayISO()), -1);
+  const days = Array.from({ length: CAL_DAYS + 2 }, (_, i) => ymd(addDays(start, i)));
+  const results = await Promise.allSettled(
+    days.map((d) => api(`/apis/site/v2/sports/soccer/${CAL_LEAGUE_ID}/scoreboard?dates=${d}`, { fresh }))
+  );
+  const byId = new Map();
+  for (const r of results) if (r.status === 'fulfilled') for (const e of r.value.events || []) byId.set(e.id, e);
+  if (!byId.size && results.every((r) => r.status === 'rejected')) throw results[0].reason;
+  return [...byId.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function matchTeams(e) {
+  const comp = e.competitions?.[0] || {};
+  const home = comp.competitors?.find((c) => c.homeAway === 'home') || {};
+  const away = comp.competitors?.find((c) => c.homeAway === 'away') || {};
+  return { comp, home, away, stage: comp.notes?.[0]?.headline || comp.altGameNote || '' };
+}
+
+function renderCalendar(events) {
+  if (!events.length) return `<div class="empty">No Champions League matches in the next ${CAL_DAYS} days.</div>`;
+  const groups = new Map();
+  for (const e of events) {
+    const day = localDayKey(e.date);
+    if (!groups.has(day)) groups.set(day, []);
+    groups.get(day).push(e);
+  }
+  return [...groups]
+    .map(
+      ([day, evs]) => `<div class="cal-day">
+        <div class="cal-date"><b>${esc(fmtDay(day))}</b><span class="muted small">${evs.length} match${evs.length === 1 ? '' : 'es'}</span></div>
+        ${evs.map(renderCalRow).join('')}
+      </div>`
+    )
+    .join('');
+}
+
+function renderCalRow(e) {
+  const { comp, home, away, stage } = matchTeams(e);
+  const st = e.status?.type?.state;
+  const when = st === 'pre' ? fmtTime(e.date) : st === 'in' ? e.status.type.shortDetail || 'Live' : 'FT';
+  const score = st === 'pre' ? 'vs' : `${esc(home.score ?? '-')} – ${esc(away.score ?? '-')}`;
+  return `<div class="cal-row" data-league="${CAL_LEAGUE_ID}" data-event="${esc(e.id)}">
+    <div class="m-status ${st === 'in' ? 'live' : ''}">${esc(when)}</div>
+    <div class="cal-teams"><span>${esc(home.team?.displayName || 'TBD')}</span><b class="cal-score">${score}</b><span>${esc(away.team?.displayName || 'TBD')}</span></div>
+    <div class="cal-meta muted small">${esc(comp.venue?.fullName || '')}${stage ? ' · ' + esc(stage) : ''}</div>
+  </div>`;
+}
+
+// iCalendar (RFC 5545) text: one event per match, times in UTC so every app shows the right local time.
+function buildIcs(events) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = (d) =>
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+  const text = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Football Dashboard//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:UEFA Champions League',
+  ];
+  const now = stamp(new Date());
+  for (const e of events) {
+    const { comp, home, away, stage } = matchTeams(e);
+    const start = new Date(e.date);
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${e.id}@football-dashboard`,
+      `DTSTAMP:${now}`,
+      `DTSTART:${stamp(start)}`,
+      `DTEND:${stamp(end)}`,
+      `SUMMARY:${text(`${home.team?.displayName || 'TBD'} vs ${away.team?.displayName || 'TBD'}`)}`,
+      `LOCATION:${text(comp.venue?.fullName)}`,
+      `DESCRIPTION:${text(['UEFA Champions League', stage].filter(Boolean).join(' - '))}`,
+      'END:VEVENT'
+    );
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+function downloadIcs(events) {
+  const blob = new Blob([buildIcs(events)], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'champions-league.ics';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function loadCalendar({ fresh = false } = {}) {
+  const box = $('#calendar-list');
+  if (!fresh) box.innerHTML = '<div class="loading">Loading Champions League fixtures…</div>';
+  try {
+    state.calEvents = await loadCalendarEvents(fresh);
+    box.innerHTML = renderCalendar(state.calEvents);
+    $('#cal-download').disabled = !state.calEvents.length;
+    setUpdated();
+  } catch (err) {
+    box.innerHTML = `<div class="error">Couldn't load fixtures (${esc(err.message)}). Try ⟳ Refresh.</div>`;
+  }
+}
+
 // Keep the current view in the URL hash so it survives reloads and can be shared,
 // e.g. #view=standings&league=eng.1
 const HASH_KEYS = { view: 'matches', league: 'all', date: '', range: 'day', status: 'all', season: '' };
@@ -690,7 +806,7 @@ function saveHash() {
 
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
-  const views = ['matches', 'standings', 'scorers', 'news'];
+  const views = ['matches', 'calendar', 'standings', 'scorers', 'news'];
   if (views.includes(p.get('view'))) state.view = p.get('view');
   if (p.get('league') === 'all' || leagueById(p.get('league'))) state.league = p.get('league');
   if (/^\d{4}-\d{2}-\d{2}$/.test(p.get('date') || '')) state.date = p.get('date');
@@ -701,6 +817,7 @@ function readHash() {
 
 function showView(view) {
   state.view = view;
+  $('#leagues').hidden = view === 'calendar'; // the calendar is Champions League only
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
 }
@@ -710,6 +827,7 @@ function loadCurrent(opts) {
   if (state.view === 'matches') return loadMatches(opts);
   if (state.view === 'standings') return loadStandings(opts);
   if (state.view === 'scorers') return loadScorers(opts);
+  if (state.view === 'calendar') return loadCalendar(opts);
   return loadNews(opts);
 }
 
@@ -780,6 +898,12 @@ function init() {
       loadCurrent();
     })
   );
+
+  $('#cal-download').addEventListener('click', () => state.calEvents?.length && downloadIcs(state.calEvents));
+  $('#calendar-list').addEventListener('click', (e) => {
+    const row = e.target.closest('.cal-row');
+    if (row) openMatch(row.dataset.league, row.dataset.event);
+  });
 
   $('#matches').addEventListener('click', (e) => {
     const row = e.target.closest('.match');
