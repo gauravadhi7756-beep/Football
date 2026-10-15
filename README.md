@@ -3,6 +3,8 @@
 A live football dashboard covering:
 
 - UEFA Champions League
+- UEFA Europa League
+- UEFA Conference League
 - UEFA Nations League
 - English Premier League
 - LaLiga

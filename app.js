@@ -6,6 +6,8 @@
 const LEAGUES = [
   { id: 'uefa.champions', name: 'UEFA Champions League', short: 'UCL', logo: 2 },
   { id: 'uefa.nations', name: 'UEFA Nations League', short: 'Nations League', logo: 2395 },
+  { id: 'uefa.europa', name: 'UEFA Europa League', short: 'Europa League', logo: 2310 },
+  { id: 'uefa.europa.conf', name: 'UEFA Conference League', short: 'Conference League', logo: 20296 },
   { id: 'eng.1', name: 'English Premier League', short: 'Premier League', logo: 23 },
   { id: 'esp.1', name: 'LaLiga', short: 'LaLiga', logo: 15 },
   { id: 'ita.1', name: 'Serie A', short: 'Serie A', logo: 12 },
