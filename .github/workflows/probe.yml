@@ -1,0 +1,20 @@
+name: Probe UCL calendar (temporary)
+on:
+  push:
+    branches: [claude/football-dashboard-matches-standings-1yrjz2]
+    paths: [.github/workflows/probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          B=https://site.web.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard
+          for q in "" "?dates=2026" "?dates=202610" "?dates=202611" "?dates=20261015" "?dates=20261015-20261115" "?dates=20261015-20261115&limit=300" "?limit=300"; do
+            echo "[$(curl -sS --compressed -o body.json -w '%{http_code}' "$B$q")] $q -> $(python3 -c "
+          import json; d=json.load(open('body.json'))
+          if 'events' not in d: print(str(d)[:120]); raise SystemExit
+          ev=d['events']; print('events', len(ev), sorted({e['date'][:10] for e in ev})[:12])
+          " 2>/dev/null || head -c 120 body.json)"
+          done
+          echo "--- today's date per ESPN for 20261015:"; curl -sS --compressed "$B?dates=20261015" | python3 -c "import json,sys; d=json.load(sys.stdin); print([(e['name'], e['date']) for e in d.get('events',[])])"
