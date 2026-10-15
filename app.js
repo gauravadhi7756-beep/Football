@@ -38,7 +38,6 @@ const state = {
   season: '',
   openEvent: null, // { league, id }
   lastEvents: [],
-  calEvents: [],
 };
 let baseIdx = 0;
 const cache = new Map();
@@ -675,152 +674,6 @@ async function loadNews({ fresh = false } = {}) {
 // ---------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Champions League calendar (time-ordered fixtures + .ics export)
-// ---------------------------------------------------------------------------
-const CAL_LEAGUE_ID = 'uefa.champions';
-const CAL_MONTHS = 8; // this month plus the next seven, which covers the rest of a season
-
-// ESPN returns a whole month for dates=YYYYMM, so the calendar renews itself:
-// every visit starts from the current month.
-function calendarMonths() {
-  const first = new Date();
-  first.setDate(1);
-  return Array.from({ length: CAL_MONTHS }, (_, i) => {
-    const d = new Date(first.getFullYear(), first.getMonth() + i, 1);
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
-}
-
-async function loadCalendarEvents(fresh) {
-  const results = await Promise.allSettled(
-    calendarMonths().map((m) => api(`/apis/site/v2/sports/soccer/${CAL_LEAGUE_ID}/scoreboard?dates=${m}`, { fresh }))
-  );
-  const byId = new Map();
-  for (const r of results) if (r.status === 'fulfilled') for (const e of r.value.events || []) byId.set(e.id, e);
-  if (!byId.size && results.every((r) => r.status === 'rejected')) throw results[0].reason;
-  const today = todayISO();
-  return [...byId.values()]
-    .filter((e) => localDayKey(e.date) >= today)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
-}
-
-function matchTeams(e) {
-  const comp = e.competitions?.[0] || {};
-  const home = comp.competitors?.find((c) => c.homeAway === 'home') || {};
-  const away = comp.competitors?.find((c) => c.homeAway === 'away') || {};
-  return { comp, home, away, stage: comp.notes?.[0]?.headline || comp.altGameNote || '' };
-}
-
-function renderCalendar(events) {
-  const today = todayISO();
-  const todays = events.filter((e) => localDayKey(e.date) === today);
-  const later = events.filter((e) => localDayKey(e.date) > today);
-  const next = events.find((e) => e.status?.type?.state === 'pre' && new Date(e.date) > new Date());
-
-  let html = `<div class="cal-today">
-    <h2>Today · ${esc(fmtDay(today))}</h2>
-    ${todays.length ? todays.map(renderCalRow).join('') : '<p class="muted">No Champions League match today.</p>'}
-    ${
-      next
-        ? `<p class="cal-next">Next match: <b>${esc(fmtDateTime(next.date))}</b> · ${esc(matchTeams(next).home.team?.displayName || 'TBD')} vs ${esc(
-            matchTeams(next).away.team?.displayName || 'TBD'
-          )}</p>`
-        : ''
-    }
-  </div>`;
-
-  if (!later.length && !todays.length) return html + '<div class="empty">No Champions League fixtures found for the rest of the season yet.</div>';
-
-  const groups = new Map();
-  for (const e of later) {
-    const day = localDayKey(e.date);
-    if (!groups.has(day)) groups.set(day, []);
-    groups.get(day).push(e);
-  }
-  html += [...groups]
-    .map(
-      ([day, evs]) => `<div class="cal-day">
-        <div class="cal-date"><b>${esc(fmtDay(day))}</b><span class="muted small">${evs.length} match${evs.length === 1 ? '' : 'es'}</span></div>
-        ${evs.map(renderCalRow).join('')}
-      </div>`
-    )
-    .join('');
-  return html;
-}
-
-function renderCalRow(e) {
-  const { comp, home, away, stage } = matchTeams(e);
-  const st = e.status?.type?.state;
-  const when = st === 'pre' ? fmtTime(e.date) : st === 'in' ? e.status.type.shortDetail || 'Live' : 'FT';
-  const score = st === 'pre' ? 'vs' : `${esc(home.score ?? '-')} – ${esc(away.score ?? '-')}`;
-  return `<div class="cal-row" data-league="${CAL_LEAGUE_ID}" data-event="${esc(e.id)}">
-    <div class="m-status ${st === 'in' ? 'live' : ''}">${esc(when)}</div>
-    <div class="cal-teams"><span>${esc(home.team?.displayName || 'TBD')}</span><b class="cal-score">${score}</b><span>${esc(away.team?.displayName || 'TBD')}</span></div>
-    <div class="cal-meta muted small">${esc(comp.venue?.fullName || '')}${stage ? ' · ' + esc(stage) : ''}</div>
-  </div>`;
-}
-
-// iCalendar (RFC 5545) text: one event per match, times in UTC so every app shows the right local time.
-function buildIcs(events) {
-  const pad = (n) => String(n).padStart(2, '0');
-  const stamp = (d) =>
-    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
-  const text = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Football Dashboard//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    'X-WR-CALNAME:UEFA Champions League',
-  ];
-  const now = stamp(new Date());
-  for (const e of events) {
-    const { comp, home, away, stage } = matchTeams(e);
-    const start = new Date(e.date);
-    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
-    lines.push(
-      'BEGIN:VEVENT',
-      `UID:${e.id}@football-dashboard`,
-      `DTSTAMP:${now}`,
-      `DTSTART:${stamp(start)}`,
-      `DTEND:${stamp(end)}`,
-      `SUMMARY:${text(`${home.team?.displayName || 'TBD'} vs ${away.team?.displayName || 'TBD'}`)}`,
-      `LOCATION:${text(comp.venue?.fullName)}`,
-      `DESCRIPTION:${text(['UEFA Champions League', stage].filter(Boolean).join(' - '))}`,
-      'END:VEVENT'
-    );
-  }
-  lines.push('END:VCALENDAR');
-  return lines.join('\r\n');
-}
-
-function downloadIcs(events) {
-  const blob = new Blob([buildIcs(events)], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'champions-league.ics';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function loadCalendar({ fresh = false } = {}) {
-  const box = $('#calendar-list');
-  if (!fresh) box.innerHTML = '<div class="loading">Loading Champions League fixtures…</div>';
-  try {
-    state.calEvents = await loadCalendarEvents(fresh);
-    box.innerHTML = renderCalendar(state.calEvents);
-    $('#cal-download').disabled = !state.calEvents.length;
-    setUpdated();
-  } catch (err) {
-    box.innerHTML = `<div class="error">Couldn't load fixtures (${esc(err.message)}). Try ⟳ Refresh.</div>`;
-  }
-}
-
 // Keep the current view in the URL hash so it survives reloads and can be shared,
 // e.g. #view=standings&league=eng.1
 const HASH_KEYS = { view: 'matches', league: 'all', date: '', range: 'day', status: 'all', season: '' };
@@ -837,7 +690,7 @@ function saveHash() {
 
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
-  const views = ['matches', 'calendar', 'standings', 'scorers', 'news'];
+  const views = ['matches', 'standings', 'scorers', 'news'];
   if (views.includes(p.get('view'))) state.view = p.get('view');
   if (p.get('league') === 'all' || leagueById(p.get('league'))) state.league = p.get('league');
   if (/^\d{4}-\d{2}-\d{2}$/.test(p.get('date') || '')) state.date = p.get('date');
@@ -848,7 +701,6 @@ function readHash() {
 
 function showView(view) {
   state.view = view;
-  $('#leagues').hidden = view === 'calendar'; // the calendar is Champions League only
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
 }
@@ -858,7 +710,6 @@ function loadCurrent(opts) {
   if (state.view === 'matches') return loadMatches(opts);
   if (state.view === 'standings') return loadStandings(opts);
   if (state.view === 'scorers') return loadScorers(opts);
-  if (state.view === 'calendar') return loadCalendar(opts);
   return loadNews(opts);
 }
 
@@ -929,12 +780,6 @@ function init() {
       loadCurrent();
     })
   );
-
-  $('#cal-download').addEventListener('click', () => state.calEvents?.length && downloadIcs(state.calEvents));
-  $('#calendar-list').addEventListener('click', (e) => {
-    const row = e.target.closest('.cal-row');
-    if (row) openMatch(row.dataset.league, row.dataset.event);
-  });
 
   $('#matches').addEventListener('click', (e) => {
     const row = e.target.closest('.match');
