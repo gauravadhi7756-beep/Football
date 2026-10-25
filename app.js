@@ -309,7 +309,8 @@ const INDIA_OTT = {
 };
 
 function renderWhereToWatch(league, comp) {
-  const listing = [...new Set((comp.broadcasts || []).flatMap((b) => b.names || [b.media?.shortName || b.media?.name]).filter(Boolean))];
+  // ESPN sends the channel names in either field, so read both and drop duplicates.
+  const listing = [...new Set((comp.broadcasts || []).flatMap((b) => [...(b.names || []), b.media?.shortName, b.media?.name]).filter(Boolean))];
   const ott = INDIA_OTT[league?.id];
   const parts = [ott ? `${ott} (India)` : null, ...listing].filter(Boolean);
   return `<div class="section"><h3>Broadcast</h3><p>${parts.length ? esc(parts.join(' · ')) : 'Not listed yet'}</p></div>`;
