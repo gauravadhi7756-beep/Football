@@ -297,6 +297,41 @@ async function openMatch(leagueId, eventId, { fresh = false } = {}) {
   }
 }
 
+// Where to watch in India. Based on news reports of 2026-27 deals (verify before kick-off):
+// Premier League and Ligue 1: JioHotstar / Star Sports; Serie A and Bundesliga: ZEE5 / Unite8;
+// Champions League: SonyLIV (Sony deal runs to the end of 2026-27).
+// Other competitions: no reliable report found, so they're shown as not confirmed.
+const OTT = {
+  jiohotstar: { name: 'JioHotstar', url: 'https://www.hotstar.com' },
+  sonyliv: { name: 'SonyLIV', url: 'https://www.sonyliv.com' },
+  zee5: { name: 'ZEE5', url: 'https://www.zee5.com' },
+  fancode: { name: 'FanCode', url: 'https://www.fancode.com' },
+};
+const INDIA_WATCH = {
+  'uefa.champions': { status: 'Reported', platforms: [OTT.sonyliv], note: 'Also on Sony Sports Network TV channels.' },
+  'eng.1': { status: 'Reported', platforms: [OTT.jiohotstar], note: 'All 380 matches, also on Star Sports TV.' },
+  'fra.1': { status: 'Reported', platforms: [OTT.jiohotstar], note: 'At least four matches each matchday, also on Star Sports for selected games.' },
+  'ita.1': { status: 'Reported', platforms: [OTT.zee5], note: 'Also on Unite8 Sports TV channels.' },
+  'ger.1': { status: 'Reported', platforms: [OTT.zee5], note: 'Five-year deal from 2026-27, also on Unite8 Sports TV channels.' },
+  'esp.1': { status: 'Not confirmed', platforms: [], note: 'The previous rights holder ended its deal. FanCode has been reported as the next holder, but this is not confirmed.' },
+};
+const INDIA_UNKNOWN = { status: 'Not confirmed', platforms: [], note: '' };
+
+function renderWhereToWatch(league, comp) {
+  const india = INDIA_WATCH[league?.id] || INDIA_UNKNOWN;
+  const listing = [...new Set((comp.broadcasts || []).flatMap((b) => b.names || [b.media?.shortName || b.media?.name]).filter(Boolean))];
+  const apps = india.platforms.length
+    ? india.platforms.map((p) => `<a class="ott" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>`).join('')
+    : '<span class="muted">No confirmed platform yet. Check the league\'s official app or a sports listing site.</span>';
+  return `<div class="section"><h3>Where to watch</h3>
+    <div class="watch-row"><b>India</b><div><span class="badge">${esc(india.status)}</span><div class="ott-list">${apps}</div>${
+      india.note ? `<p class="muted small">${esc(india.note)}</p>` : ''
+    }</div></div>
+    <div class="watch-row"><b>Listing (ESPN)</b><div>${listing.length ? esc(listing.join(', ')) : '<span class="muted">Not listed</span>'}</div></div>
+    <p class="muted small">Broadcast rights change between seasons, so check the app before kick-off.</p>
+  </div>`;
+}
+
 function renderMatchDetail(league, s) {
   const comp = s.header?.competitions?.[0] || {};
   const home = comp.competitors?.find((c) => c.homeAway === 'home') || {};
@@ -416,6 +451,8 @@ function renderMatchDetail(league, s) {
       .join('')}</ul></div>`;
   }
 
+  html += renderWhereToWatch(league, comp);
+
   // Info
   const gi = s.gameInfo || {};
   const info = [
@@ -423,7 +460,6 @@ function renderMatchDetail(league, s) {
     ['Venue', [gi.venue?.fullName, gi.venue?.address?.city, gi.venue?.address?.country].filter(Boolean).join(', ')],
     ['Attendance', gi.attendance ? Number(gi.attendance).toLocaleString() : ''],
     ['Referee', (gi.officials || []).map((o) => o.displayName || o.fullName).filter(Boolean).join(', ')],
-    ['Broadcast', (comp.broadcasts || []).map((b) => b.media?.shortName || b.media?.name).filter(Boolean).join(', ')],
   ].filter(([, v]) => v);
   if (info.length) {
     html += `<div class="section"><h3>Match info</h3><div class="info-grid">${info
