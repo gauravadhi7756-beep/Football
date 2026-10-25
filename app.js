@@ -297,13 +297,15 @@ async function openMatch(leagueId, eventId, { fresh = false } = {}) {
   }
 }
 
-// Indian platform per competition, from news reports of 2026-27 deals (check before kick-off).
+// Indian platform per competition, from news reports of current deals (check before kick-off).
 const INDIA_OTT = {
   'uefa.champions': 'SonyLIV',
   'eng.1': 'JioHotstar',
   'fra.1': 'JioHotstar',
   'ita.1': 'ZEE5',
   'ger.1': 'ZEE5',
+  'esp.1': 'FanCode',
+  'ksa.1': 'FanCode',
 };
 
 function renderWhereToWatch(league, comp) {
