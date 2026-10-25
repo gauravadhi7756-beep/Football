@@ -20,7 +20,7 @@ A live football dashboard covering:
 - **Matches**: live scores, fixtures and results for any day or week, across every competition at once or one at a time. You can filter by Live, Upcoming or Finished. Live matches refresh every 30 seconds.
 - **Match details** (click any match): goals, cards and substitutions timeline, team stats (possession, shots, corners, fouls…), lineups with formations and subs, recent head-to-head, venue and attendance, plus the broadcasters, with the Indian platform (JioHotstar, SonyLIV or ZEE5) shown first where known.
 - **Tables**: full league tables (P, W, D, L, GF, GA, GD, Pts) with qualification and relegation zones colour-coded, group tables for the Nations League and MLS conferences, and past seasons.
-- **Top Scorers**: the top 20 goal scorers and assist providers in each competition, with matches played. This tab uses the same season picker as Tables.
+- **Top Scorers**: the top 20 goal scorers and assist providers in each competition, with matches played. Click a player's name for their card: country, position (including winger type), club, age, height, a Wikipedia biography and their latest news. This tab uses the same season picker as Tables.
 - **News**: the latest headlines for the selected competitions.
 - The page address remembers the tab, competition, date and season, so you can bookmark or share a view (e.g. `#view=standings&league=eng.1`).
 - A live-match counter on the Matches tab.

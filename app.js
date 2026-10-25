@@ -615,15 +615,97 @@ async function loadScorers({ fresh = false } = {}) {
         }</div></div>`;
       }
       return `<div class="league-block">${head}<div class="leaders-grid">
-        ${goals?.leaders?.length ? renderLeaders('Top scorers', goals.leaders, 'goals', 'Goals') : ''}
-        ${assists?.leaders?.length ? renderLeaders('Top assists', assists.leaders, 'assists', 'Assists') : ''}
+        ${goals?.leaders?.length ? renderLeaders('Top scorers', goals.leaders, 'goals', 'Goals', league.id) : ''}
+        ${assists?.leaders?.length ? renderLeaders('Top assists', assists.leaders, 'assists', 'Assists', league.id) : ''}
       </div></div>`;
     })
     .join('');
   setUpdated();
 }
 
-function renderLeaders(title, leaders, key, label) {
+// ---------------------------------------------------------------------------
+// Player card (opened by clicking a name in Top Scorers)
+// Sources: ESPN player profile and ESPN news filtered by player; biography from Wikipedia.
+// ---------------------------------------------------------------------------
+const WING_ROLES = { LW: 'Left winger', RW: 'Right winger', LM: 'Left midfielder (wide)', RM: 'Right midfielder (wide)' };
+
+async function loadWikiBio(name) {
+  try {
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, '_'))}`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (d.type === 'disambiguation' || !d.extract) return null;
+    return { extract: d.extract, url: d.content_urls?.desktop?.page, image: d.thumbnail?.source };
+  } catch {
+    return null;
+  }
+}
+
+async function openPlayer({ leagueId, athleteId, name, statLine }) {
+  const dlg = $('#player-modal');
+  const body = $('#player-body');
+  dlg.dataset.current = athleteId;
+  body.innerHTML = '<div class="loading">Loading player…</div>';
+  if (!dlg.open) dlg.showModal();
+  try {
+    const [profile, news] = await Promise.all([
+      api(`/apis/common/v3/sports/soccer/athletes/${athleteId}`),
+      api(`/apis/site/v2/sports/soccer/${leagueId}/news?athlete=${athleteId}`).catch(() => ({ articles: [] })),
+    ]);
+    const a = profile.athlete || {};
+    const bio = await loadWikiBio(a.displayName || name);
+    if (dlg.dataset.current !== String(athleteId)) return; // another player was opened meanwhile
+    body.innerHTML = renderPlayer(a, bio, news.articles || [], statLine);
+  } catch (err) {
+    if (dlg.dataset.current === String(athleteId)) body.innerHTML = `<div class="error">Couldn't load player details (${esc(err.message)}).</div>`;
+  }
+}
+
+function renderPlayer(a, bio, articles, statLine) {
+  const pos = a.position?.abbreviation || '';
+  const role = WING_ROLES[pos] || a.position?.displayName || '';
+  const photo = a.headshot?.href || bio?.image || '';
+  const facts = [
+    ['Country', a.citizenship],
+    ['Position', role ? `${role}${pos ? ` (${pos})` : ''}` : ''],
+    ['Club', a.team?.displayName],
+    ['Shirt number', a.jersey ? `#${a.jersey}` : ''],
+    ['Age', a.age],
+    ['Height', a.displayHeight],
+    ['Date of birth', a.dateOfBirth ? new Date(a.dateOfBirth).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' }) : ''],
+    ['This season', statLine],
+  ].filter(([, v]) => v !== undefined && v !== null && v !== '');
+
+  const news = articles
+    .filter((n) => n.headline)
+    .slice(0, 5)
+    .map(
+      (n) => `<li>
+        <a href="${esc(n.links?.web?.href || '#')}" target="_blank" rel="noopener">${esc(n.headline)}</a>
+        <div class="muted small">${n.published ? esc(new Date(n.published).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })) : ''}</div>
+      </li>`
+    )
+    .join('');
+
+  return `<div class="pl-head">
+      ${photo ? `<img class="pl-photo" src="${esc(photo)}" alt="" onerror="this.remove()">` : ''}
+      <div>
+        <h2 class="pl-name">${esc(a.displayName || '')}</h2>
+        ${a.flag?.href ? `<img class="pl-flag" src="${esc(a.flag.href)}" alt="${esc(a.citizenship || '')}">` : ''}
+        <span class="muted">${esc(a.citizenship || '')}</span>
+      </div>
+    </div>
+    <div class="section"><h3>Player info</h3><div class="info-grid">${facts.map(([k, v]) => `<div><b>${esc(k)}</b>${esc(v)}</div>`).join('')}</div></div>
+    <div class="section"><h3>Biography</h3>${
+      bio
+        ? `<p class="bio">${esc(bio.extract)}</p>${bio.url ? `<a href="${esc(bio.url)}" target="_blank" rel="noopener">Read more on Wikipedia</a>` : ''}`
+        : '<p class="muted">No Wikipedia biography found for this player.</p>'
+    }</div>
+    <div class="section"><h3>Latest news</h3>${news ? `<ul class="news-mini">${news}</ul>` : '<p class="muted">No recent news found for this player.</p>'}</div>
+    <p class="muted small source-line">Profile and news: ESPN · Biography: Wikipedia (CC BY-SA)</p>`;
+}
+
+function renderLeaders(title, leaders, key, label, leagueId) {
   let prevVal = null;
   let rank = 0;
   const rows = leaders
@@ -638,7 +720,7 @@ function renderLeaders(title, leaders, key, label) {
       const photo = a.headshot?.href || a.headshot || '';
       return `<tr>
         <td class="pos">${rank}</td>
-        <td class="team-cell"><div>${photo ? logoImg(photo) : logoImg(teamLogo(team))}<span><b>${esc(a.displayName || a.fullName || '')}</b>${
+        <td class="team-cell"><div>${photo ? logoImg(photo) : logoImg(teamLogo(team))}<span><button class="player-link" data-league="${esc(leagueId)}" data-athlete="${esc(a.id || '')}" data-name="${esc(a.displayName || a.fullName || '')}" data-stat="${esc(`${label}: ${Number.isFinite(Number(val)) ? Math.round(Number(val)) : val}`)}"><b>${esc(a.displayName || a.fullName || '')}</b></button>${
         team.displayName || team.name ? `<br><span class="muted small">${esc(team.displayName || team.name)}</span>` : ''
       }</span></div></td>
         <td>${esc(f.matches ?? f.appearances ?? '–')}</td>
@@ -800,6 +882,14 @@ function init() {
       loadCurrent();
     })
   );
+
+  $('#scorers').addEventListener('click', (e) => {
+    const b = e.target.closest('.player-link');
+    if (b) openPlayer({ leagueId: b.dataset.league, athleteId: b.dataset.athlete, name: b.dataset.name, statLine: b.dataset.stat });
+  });
+  const playerModal = $('#player-modal');
+  $('#player-close').addEventListener('click', () => playerModal.close());
+  playerModal.addEventListener('click', (e) => e.target === playerModal && playerModal.close());
 
   $('#matches').addEventListener('click', (e) => {
     const row = e.target.closest('.match');

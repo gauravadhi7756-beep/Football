@@ -6,7 +6,7 @@
   <!-- Bump ?v= on app.js/styles.css with each release so browsers skip stale cached copies. -->
   <title>Football Dashboard</title>
   <meta name="description" content="Live scores, fixtures, results, standings and news for the Champions League, Europa League, Conference League, Nations League, Premier League, LaLiga, Serie A, Ligue 1, MLS, the Saudi Pro League, the Bundesliga and the Eredivisie." />
-  <link rel="stylesheet" href="styles.css?v=2026-10-15-nocal" />
+  <link rel="stylesheet" href="styles.css?v=2026-10-25-player" />
 </head>
 <body>
   <header class="topbar">
@@ -81,6 +81,13 @@
     </section>
   </main>
 
+  <dialog id="player-modal">
+    <div class="modal-head">
+      <button class="icon-btn close" id="player-close" title="Close">✕</button>
+    </div>
+    <div id="player-body"></div>
+  </dialog>
+
   <dialog id="match-modal">
     <div class="modal-head">
       <button class="icon-btn close" id="modal-close" title="Close">✕</button>
@@ -90,6 +97,6 @@
 
   <footer class="muted small">Data: ESPN public sports API. Live matches auto-refresh every 30 seconds.</footer>
 
-  <script src="app.js?v=2026-10-15-nocal"></script>
+  <script src="app.js?v=2026-10-25-player"></script>
 </body>
 </html>
